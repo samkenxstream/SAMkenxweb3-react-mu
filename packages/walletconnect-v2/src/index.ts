@@ -101,19 +101,11 @@ export class WalletConnect extends Connector {
         rpcMap: await rpcMap,
       }))
 
-      /**
-       * TODO(INFRA-137):
-       * WalletConnect `on` and `removeListener` methods do not return the provider instance,
-       * but underlying EventEmitter instead. This is why we have to return `provider` explicitly later
-       * rather than here.
-       */
-      provider
+      return provider
         .on('disconnect', this.disconnectListener)
         .on('chainChanged', this.chainChangedListener)
         .on('accountsChanged', this.accountsChangedListener)
         .on('display_uri', this.URIListener)
-
-      return provider
     }))
   }
 
@@ -143,8 +135,19 @@ export class WalletConnect extends Connector {
 
     if (provider.session) {
       if (!desiredChainId || desiredChainId === provider.chainId) return
-      if (!this.chains.includes(desiredChainId)) {
-        throw new Error(`Cannot activate chain (${desiredChainId}) that was not included in initial options.chains.`)
+      // WalletConnect exposes connected accounts, not chains: `eip155:${chainId}:${address}`
+      const isConnectedToDesiredChain = provider.session.namespaces.eip155.accounts.some((account) =>
+        account.startsWith(`eip155:${desiredChainId}:`)
+      )
+      if (!isConnectedToDesiredChain) {
+        if (this.options.optionalChains?.includes(desiredChainId)) {
+          throw new Error(
+            `Cannot activate an optional chain (${desiredChainId}), as the wallet is not connected to it.\n\tYou should handle this error in application code, as there is no guarantee that a wallet is connected to a chain configured in "optionalChains".`
+          )
+        }
+        throw new Error(
+          `Unknown chain (${desiredChainId}). Make sure to include any chains you might connect to in the "chains" or "optionalChains" parameters when initializing WalletConnect.`
+        )
       }
       return provider.request<void>({
         method: 'wallet_switchEthereumChain',
@@ -166,15 +169,12 @@ export class WalletConnect extends Connector {
 
   /** {@inheritdoc Connector.deactivate} */
   public async deactivate(): Promise<void> {
-    await this.provider
+    this.provider
       ?.removeListener('disconnect', this.disconnectListener)
       .removeListener('chainChanged', this.chainChangedListener)
       .removeListener('accountsChanged', this.accountsChangedListener)
       .removeListener('display_uri', this.URIListener)
-    /**
-     * TODO(INFRA-137): chain `disconnect()` too once WalletConnect fixes `removeListener` to return Provider instead of EventEmitter
-     */
-    this.provider?.disconnect()
+      .disconnect()
     this.provider = undefined
     this.eagerConnection = undefined
     this.actions.resetState()

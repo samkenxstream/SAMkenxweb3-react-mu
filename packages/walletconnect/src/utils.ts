@@ -1,23 +1,9 @@
 /**
- * @param rpcMap - Map of chainIds to rpc url(s).
- * @param timeout - Timeout, in milliseconds, after which to consider network calls failed.
- */
-export async function getBestUrlMap(
-  rpcMap: Record<string, string | string[]>,
-  timeout: number
-): Promise<{ [chainId: string]: string }> {
-  return Object.fromEntries(
-    await Promise.all(Object.entries(rpcMap).map(async ([chainId, map]) => [chainId, await getBestUrl(map, timeout)]))
-  )
-}
-
-/**
  * @param urls - An array of URLs to try to connect to.
- * @param timeout - {@link getBestUrlMap}
+ * @param timeout - How long to wait before a call is considered failed, in ms.
  */
-async function getBestUrl(urls: string | string[], timeout: number): Promise<string> {
+export async function getBestUrl(urls: string[], timeout: number): Promise<string> {
   // if we only have 1 url, it's the best!
-  if (typeof urls === 'string') return urls
   if (urls.length === 1) return urls[0]
 
   const [HttpConnection, JsonRpcProvider] = await Promise.all([
@@ -79,21 +65,4 @@ async function getBestUrl(urls: string | string[], timeout: number): Promise<str
         })
     })
   })
-}
-
-/**
- * @param chains - An array of chain IDs.
- * @param defaultChainId - The chain ID to treat as the default (it will be the first element in the returned array).
- */
-export function getChainsWithDefault(chains: number[], defaultChainId: number) {
-  const idx = chains.indexOf(defaultChainId)
-  if (idx === -1) {
-    throw new Error(
-      `Invalid chainId ${defaultChainId}. Make sure default chain is included in "chains" - chains specified in "optionalChains" may not be selected as the default, as they may not be supported by the wallet.`
-    )
-  }
-
-  const ordered = [...chains]
-  ordered.splice(idx, 1)
-  return [defaultChainId, ...ordered]
 }
